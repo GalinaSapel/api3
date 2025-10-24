@@ -1,27 +1,17 @@
-import pickle
 import pandas as pd
-import numpy as np 
+import joblib
 
-# Загрузка модели из файла pickle
-with open('model.pkl', 'rb') as f:
-    model = pickle.load(f)
+# Загрузка артефактов
+model = joblib.load(r'best_lgb.pkl')
+feature_names = joblib.load(r'feature_names.pkl')
+X_inf = pd.read_parquet(r'X_inf_example.parquet')
 
-import pandas as pd
-
-# Новые данные
-new_data = pd.DataFrame({
-    'time_since_last_liquidated': [np.random.randint(0, 1000)],      
-    'time_since_first_deposit': [np.random.randint(100, 5000)],
-    'total_available_borrows_eth': [np.random.uniform(0.1, 50.0)],   
-    'borrow_timestamp': [np.random.randint(1600000000, 1700000000)], 
-    'wallet_age': [np.random.randint(1000, 10000)],                  
-    'min_eth_ever': [np.random.uniform(0.01, 5.0)],
-    'max_eth_ever': [np.random.uniform(10.0, 100.0)],
-    'total_collateral_eth': [np.random.uniform(1.0, 80.0)]
-})
+# Возьмём первую строку как пример нового запроса
+single_row = X_inf.iloc[[0]]  
+X_input = single_row[feature_names]
 
 # Предсказание
-predictions = model.predict(new_data)
+prediction = model.predict(X_input)
+probability = model.predict_proba(X_input)[:, 1]
 
-# Вывод результатов
-print(predictions)
+print(f"Предсказание: {prediction[0]}, Вероятность: {probability[0]:.4f}")
