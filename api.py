@@ -17,12 +17,6 @@ if not os.path.exists(MODEL_PATH) or not os.path.exists(FEATURES_PATH):
 model = joblib.load(MODEL_PATH)
 feature_names = joblib.load(FEATURES_PATH)  # должен быть список строк
 
-# === Динамическое создание Pydantic-модели на основе feature_names ===
-PredictionInput = create_model(
-    "PredictionInput",
-    **{feat: (float, ...) for feat in feature_names}
-)
-
 # === Счётчик запросов ===
 request_count = 0
 
@@ -47,9 +41,6 @@ def predict_random():
 
     try:
         df_example = pd.read_parquet(EXAMPLE_DATA_PATH)
-        missing = set(feature_names) - set(df_example.columns)
-        if missing:
-            raise ValueError(f"В parquet-файле отсутствуют признаки: {missing}")
 
         random_row = df_example.sample(n=1).iloc[0].to_dict()
         input_for_model = {feat: random_row[feat] for feat in feature_names}
@@ -65,4 +56,4 @@ def predict_random():
 # === Запуск (для локального теста) ===
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=5000)
+    uvicorn.run(app, host="0.0.0.0", port=5000)
