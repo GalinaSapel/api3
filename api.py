@@ -9,6 +9,7 @@ app = FastAPI()
 # === Загрузка артефактов ===
 MODEL_PATH = "best_lgb.pkl"
 FEATURES_PATH = "feature_names.pkl"
+EXAMPLE_DATA_PATH = "X_inf_example.parquet"
 
 if not os.path.exists(MODEL_PATH) or not os.path.exists(FEATURES_PATH):
     raise FileNotFoundError("Модель или список признаков не найдены. Убедитесь, что файлы лежат в корне проекта.")
@@ -17,7 +18,6 @@ model = joblib.load(MODEL_PATH)
 feature_names = joblib.load(FEATURES_PATH)  # должен быть список строк
 
 # === Динамическое создание Pydantic-модели на основе feature_names ===
-# Все признаки — float (можно адаптировать под int/bool при необходимости)
 PredictionInput = create_model(
     "PredictionInput",
     **{feat: (float, ...) for feat in feature_names}
@@ -25,6 +25,11 @@ PredictionInput = create_model(
 
 # === Счётчик запросов ===
 request_count = 0
+
+def make_prediction(input_dict: dict) -> int:
+    df = pd.DataFrame([input_dict])[feature_names]
+    pred = model.predict(df)
+    return int(pred[0])
 
 # === Эндпоинты ===
 @app.get("/health")
@@ -35,33 +40,29 @@ def health():
 def stats():
     return {"request_count": request_count}
 
-@app.post("/predict")
-def predict(input_data: PredictionInput):
+@app.get("/predict_random")
+def predict_random():
     global request_count
     request_count += 1
 
     try:
-        # Преобразуем входные данные в DataFrame с правильным порядком признаков
-        input_dict = input_data.model_dump()  # или .dict() в старых версиях Pydantic
-        df = pd.DataFrame([input_dict])
-        df = df[feature_names]  # гарантирует правильный порядок
+        df_example = pd.read_parquet(EXAMPLE_DATA_PATH)
+        missing = set(feature_names) - set(df_example.columns)
+        if missing:
+            raise ValueError(f"В parquet-файле отсутствуют признаки: {missing}")
 
-        # Предсказание
-        pred = model.predict(df)[0]
-        proba = model.predict_proba(df)[0].max() if hasattr(model, "predict_proba") else None
-
-        result = "Default" if pred == 1 else "No Default"
+        random_row = df_example.sample(n=1).iloc[0].to_dict()
+        input_for_model = {feat: random_row[feat] for feat in feature_names}
+        prediction = make_prediction(input_for_model)
 
         return {
-            "prediction": result,
-            "probability": float(proba) if proba is not None else None,
-            "request_id": request_count
+            "input": input_for_model,
+            "prediction": prediction
         }
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка предсказания: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка в predict_random: {str(e)}")
 
 # === Запуск (для локального теста) ===
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    uvicorn.run(app, host="127.0.0.1", port=5000)

@@ -1,6 +1,6 @@
 # Игнорировать данные и модели
 data/
-*.parquet
+dataset.parquet
 *.csv
 *.pkl
 *.joblib
